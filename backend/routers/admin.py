@@ -5,8 +5,12 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import jwt, JWTError
 import uuid
+import os
+import shutil
 
 from config import settings
+from vectorstore.ingestion import ingest_pdf, ingest_json, ingest_txt
+from vectorstore.chroma_client import delete_collection
 from database import get_db
 from models.db import PolicyDocument
 
@@ -64,18 +68,31 @@ async def upload_document(
     admin: str = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    # Stub: Save file to disk
-    # In a real app, you would save it, parse it with PyMuPDF, chunk it, and store in Chroma
-    # For now we'll just register it in the DB
-    content = await file.read()
+    upload_dir = "uploads"
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, file.filename)
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    collection_name = str(uuid.uuid4())
+    policy_name = f"Generated from {file.filename}"
+    insurer = "Unknown"
     
-    # Save a stub record
+    if file.filename.lower().endswith(".pdf"):
+        ingest_pdf(file_path, policy_name, insurer, collection_name)
+    elif file.filename.lower().endswith(".json"):
+        ingest_json(file_path, policy_name, insurer, collection_name)
+    elif file.filename.lower().endswith(".txt"):
+        ingest_txt(file_path, policy_name, insurer, collection_name)
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported file format")
+
     db_document = PolicyDocument(
         file_name=file.filename,
         file_type=file.content_type,
-        policy_name=f"Generated from {file.filename}",
-        insurer="Unknown",
-        chroma_collection_id=str(uuid.uuid4())
+        policy_name=policy_name,
+        insurer=insurer,
+        chroma_collection_id=collection_name
     )
     db.add(db_document)
     db.commit()
@@ -114,7 +131,9 @@ def delete_document(doc_id: str, admin: str = Depends(get_current_admin), db: Se
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     
+    if doc.chroma_collection_id:
+        delete_collection(doc.chroma_collection_id)
+        
     db.delete(doc)
     db.commit()
-    # Stub: delete from Chroma as well
     return {"message": "Document deleted successfully"}
