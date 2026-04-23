@@ -37,7 +37,7 @@ const useStore = create((set) => ({
     try {
       const profile = useStore.getState().userProfile;
       // Note: In a real app, use an environment variable for the API URL
-      const response = await fetch('http://localhost:8000/recommender/recommend', {
+      const response = await fetch('http://localhost:8000/api/recommend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ profile }),

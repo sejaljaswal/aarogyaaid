@@ -4,9 +4,9 @@ from models.policy import PolicyRecommendation
 from logic.scoring import get_recommendations
 from typing import List
 
-router = APIRouter(prefix="/recommender", tags=["Recommender"])
+router = APIRouter(prefix="/api/recommend", tags=["Recommender"])
 
-@router.post("/recommend", response_model=List[PolicyRecommendation])
+@router.post("/", response_model=List[PolicyRecommendation])
 async def recommend_policies(request: PolicyRecommendationRequest):
     try:
         recommendations = get_recommendations(request.profile)
