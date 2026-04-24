@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
@@ -65,6 +65,8 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
 @router.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
+    policy_name: str = Form(...),
+    insurer: str = Form(...),
     admin: str = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
@@ -75,8 +77,6 @@ async def upload_document(
         shutil.copyfileobj(file.file, buffer)
         
     collection_name = str(uuid.uuid4())
-    policy_name = f"Generated from {file.filename}"
-    insurer = "Unknown"
     
     if file.filename.lower().endswith(".pdf"):
         ingest_pdf(file_path, policy_name, insurer, collection_name)

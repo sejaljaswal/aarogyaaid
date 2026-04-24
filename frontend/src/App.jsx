@@ -4,14 +4,8 @@ import ProfileForm from './pages/ProfileForm';
 import RecommendationPage from './pages/RecommendationPage';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
+import ProtectedRoute from './components/ProtectedRoute';
 import { ShieldCheck, HeartPulse } from 'lucide-react';
-
-// A simple protected route wrapper for the dashboard
-const ProtectedRoute = ({ children }) => {
-  // In a real app, you'd check authentication status here
-  const isAuthenticated = localStorage.getItem('isAdminLoggedIn') === 'true';
-  return isAuthenticated ? children : <Navigate to="/admin" />;
-};
 
 function App() {
   return (
