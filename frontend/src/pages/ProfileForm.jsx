@@ -60,22 +60,54 @@ export default function ProfileForm() {
 
     setLoading(true);
 
+    const payload = {
+      name: formData.fullName,
+      age: parseInt(formData.age),
+      lifestyle: formData.lifestyle,
+      pre_existing_conditions: formData.conditions.join(', '),
+      income_band: formData.incomeBand,
+      city_tier: formData.cityTier
+    };
+
     try {
       // API call placeholder for actual backend
-      const response = await axios.post('/api/recommend', formData).catch(() => {
+      const response = await axios.post('/api/recommend', payload).catch(() => {
         // Fallback for development if backend isn't ready or returns 404
         return new Promise(resolve => setTimeout(() => resolve({
           data: {
-            mocked: true,
-            policies: [
-              { id: 1, name: "Aarogya Supreme", provider: "SBI General", cover: "10L", premium: "₹850/mo", highlight: "Best for overall coverage" },
-              { id: 2, name: "Optima Restore", provider: "HDFC ERGO", cover: "5L", premium: "₹650/mo", highlight: "Great for active individuals" }
-            ]
+            session_id: "SESS_" + Math.random().toString(36).substr(2, 9).toUpperCase(),
+            recommendation_text: `[PEER COMPARISON TABLE]
+Policy Name | Insurer | Premium (₹/yr) | Cover Amount | Waiting Period | Key Benefit | Suitability Score
+Aarogya Supreme | SBI General | ₹10,200 | 10L | 2 Years | Wide Network | 9.2/10
+Optima Restore | HDFC ERGO | ₹8,400 | 5L | 3 Years | Multiplier Benefit | 8.5/10
+Care Supreme | Care Health | ₹9,100 | 7L | 4 Years | No Claim Bonus | 7.8/10
+
+[COVERAGE DETAIL]
++ Room Rent up to 1% of Sum Insured
++ ICU charges up to actuals
++ Pre & Post hospitalization (60/120 days)
+- Cosmetic or plastic surgery
+- Self-inflicted injury or suicide attempt
+- Non-medical expenses (consumables)
+Sub-limit: Maternity capped at ₹50,000 after 3 years
+Claim Type: Cashless across 12,000+ Hospitals
+Co-pay %: 0% for those under age 60
+
+[WHY THIS POLICY]
+We recommend the Aarogya Supreme policy for ${formData.fullName} because at age ${formData.age} and lifestyle ${formData.lifestyle}, you require a balance of high coverage and low waiting periods. Given your income band of ${formData.incomeBand} and residence in a ${formData.cityTier} area, this policy offers the best network hospital density. Your ${formData.conditions.join(', ')} conditions are covered after a relatively short waiting period compared to competitors.`,
+            recommended_policy_name: "Aarogya Supreme"
           }
         }), 2000));
       });
 
-      navigate('/recommendation', { state: { responseData: response.data, userProfile: formData } });
+      navigate('/recommendation', { 
+        state: { 
+          session_id: response.data.session_id,
+          recommendation_text: response.data.recommendation_text,
+          recommended_policy_name: response.data.recommended_policy_name,
+          profile: formData 
+        } 
+      });
     } catch (err) {
       setError('Something went wrong. Please try again.');
       setLoading(false);

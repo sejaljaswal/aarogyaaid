@@ -6,7 +6,7 @@ from agents.tools import retrieve_all_policies
 from config import settings
 
 llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-pro", 
+    model="gemini-1.5-flash", 
     temperature=0.2, 
     google_api_key=settings.GOOGLE_API_KEY
 )
