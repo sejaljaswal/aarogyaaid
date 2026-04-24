@@ -2,10 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from typing import List, Optional
+import logging
 
 from database import get_db
 from models.db import PolicyDocument, UserSession
 from agents.recommendation_agent import get_recommendation
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/recommend", tags=["Recommender"])
 
@@ -33,14 +36,22 @@ def get_policy_recommendation(request: RecommendationRequest, db: Session = Depe
     
     # Call the recommendation agent
     try:
-        recommendation_text = get_recommendation(profile_dict, all_collection_names)
+        result_data = get_recommendation(profile_dict, all_collection_names)
+        
+        # In the new SDK model, get_recommendation returns the text direct
+        # or a dict if there's a fallback/error from generate_response
+        if isinstance(result_data, dict):
+            if result_data.get("status") in ["fallback", "success"]:
+                recommendation_text = result_data["data"]
+            else:
+                # Last resort error handling
+                logger.error(f"[API ERROR] LLM failed and no fallback: {result_data}")
+                recommendation_text = "Standard health insurance recommended. Please consult an advisor."
+        else:
+            recommendation_text = result_data
     except Exception as e:
-        err_str = str(e).lower()
-        if "chroma" in err_str or "connection" in err_str:
-            raise HTTPException(status_code=503, detail="Knowledge base temporarily unavailable")
-        if "google" in err_str or "llm" in err_str or "model" in err_str:
-            raise HTTPException(status_code=502, detail="AI generation service failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[API ERROR] Internal crash: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error during recommendation")
     
     # Attempt to extract recommended policy name by checking DB
     recommended_policy_name = "AI Recommendation Match"

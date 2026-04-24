@@ -1,9 +1,8 @@
 import json
-from langchain_core.tools import tool
 from vectorstore.ingestion import retrieve_chunks
 from vectorstore.chroma_client import chroma_client
 
-@tool
+
 def retrieve_policy_chunks(query: str, collection_name: str) -> str:
     """
     Use this tool to retrieve relevant clauses and data from a specific insurance policy document stored in the knowledge base. Always use this before making any recommendation.
@@ -17,7 +16,7 @@ def retrieve_policy_chunks(query: str, collection_name: str) -> str:
         formatted.append(f"Content: {r['text']}\nMetadata: {json.dumps(r['metadata'])}\nScore: {r['score']}")
     return "\n\n---\n\n".join(formatted)
 
-@tool
+
 def retrieve_all_policies(query: str) -> str:
     """
     Use this tool to compare multiple policies. Retrieves relevant sections from all uploaded policy documents.

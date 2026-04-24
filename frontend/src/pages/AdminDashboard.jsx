@@ -234,38 +234,36 @@ export default function AdminDashboard() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-gray-50/80 border-b border-gray-100">
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Policy Info</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">File</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Policy</th>
                   <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Insurer</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Index Time</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Type</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Upload Date</th>
                   <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {documents.map((doc) => (
                   <tr key={doc.id} className="border-b border-gray-50 hover:bg-gray-50/30 transition-colors">
+                    <td className="px-6 py-6 font-bold text-gray-500 text-xs">
+                       {doc.file_name}
+                    </td>
                     <td className="px-6 py-6">
-                      <div className="flex items-center space-x-4">
-                        <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                          <FileText size={20} />
-                        </div>
-                        <div className="flex flex-col">
-                          {editingId === doc.id ? (
-                            <input 
-                               type="text" 
-                               value={editValues.policy_name} 
-                               onChange={(e) => setEditValues({ ...editValues, policy_name: e.target.value })}
-                               className="px-2 py-1 border-b-2 border-teal-500 outline-none text-sm font-bold bg-white"
-                            />
-                          ) : (
-                            <span className="text-sm font-black text-gray-900">{doc.policy_name}</span>
-                          )}
-                          <span className="text-[10px] font-bold text-gray-400 truncate max-w-[150px]">{doc.file_name}</span>
-                        </div>
+                      <div className="flex flex-col">
+                        {editingId === doc.id ? (
+                          <input 
+                              type="text" 
+                              value={editValues.policy_name} 
+                              onChange={(e) => setEditValues({ ...editValues, policy_name: e.target.value })}
+                              className="px-2 py-1 border-b-2 border-teal-500 outline-none text-sm font-bold bg-white"
+                          />
+                        ) : (
+                          <span className="text-sm font-black text-gray-900">{doc.policy_name}</span>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-6">
                       <div className="flex items-center text-gray-600">
-                        <Building size={14} className="mr-2 opacity-30" />
                         {editingId === doc.id ? (
                             <input 
                                type="text" 
@@ -279,9 +277,14 @@ export default function AdminDashboard() {
                       </div>
                     </td>
                     <td className="px-6 py-6">
+                      <span className="px-3 py-1 bg-gray-100 text-[10px] font-black text-gray-500 rounded-full uppercase">
+                        {doc.file_type?.split('/')?.pop() || 'file'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-6">
                       <div className="flex items-center text-[10px] font-black text-gray-400 uppercase tracking-widest">
                         <Calendar size={12} className="mr-2" />
-                        {new Date(doc.created_at).toLocaleDateString()}
+                        {new Date(doc.upload_date).toLocaleString()}
                       </div>
                     </td>
                     <td className="px-6 py-6 transition-all">

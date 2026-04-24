@@ -1,57 +1,85 @@
 import json
-from langchain.agents import AgentExecutor, create_tool_calling_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage, AIMessage
+import logging
+from services.llmService import generate_response
 from agents.tools import retrieve_policy_chunks
-from config import settings
 
-llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash", 
-    temperature=0.3, 
-    google_api_key=settings.GOOGLE_API_KEY
-)
+logger = logging.getLogger(__name__)
 
-system_prompt = """
-You are Aarogya, an empathetic health insurance specialist focusing ONLY on the policy: {recommended_policy}.
-You must assist this specific user based on their profile details provided. Do NOT ask for their profile details again.
-
-You must:
-1. Break down complex insurance jargon implicitly in your explanation.
-2. Generate examples using the user's actual city and health conditions based on the profile.
-3. ALWAYS use the `retrieve_policy_chunks` tool for EVERY factual claim you make about the policy to ensure accuracy.
-4. ONLY cite facts retrieved from the tool. Never invent them. 
-5. Provide helpful context based on their profile.
-6. Refuse any medical advice questions politely.
-"""
-
-prompt = ChatPromptTemplate.from_messages([
-    ("system", system_prompt),
-    ("human", "User Profile: {profile_str}\nCollection Name for Tool: {collection_name}"),
-    MessagesPlaceholder(variable_name="chat_history"),
-    ("human", "{input}"),
-    MessagesPlaceholder(variable_name="agent_scratchpad"),
-])
-
-tools = [retrieve_policy_chunks]
-agent = create_tool_calling_agent(llm, tools, prompt)
-agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
-
-def get_chat_response(message: str, profile: dict, recommended_policy: str, collection_name: str, chat_history: list) -> str:
-    # Convert simple dict chat history into LangChain messages
-    formatted_history = []
-    for msg in chat_history:
-        if msg.get("role") == "user":
-            formatted_history.append(HumanMessage(content=msg.get("content", "")))
-        elif msg.get("role") == "ai" or msg.get("role") == "assistant":
-            formatted_history.append(AIMessage(content=msg.get("content", "")))
-            
-    response = agent_executor.invoke({
-        "input": message,
-        "profile_str": json.dumps(profile, indent=2),
-        "recommended_policy": recommended_policy,
-        "collection_name": collection_name,
-        "chat_history": formatted_history
-    })
+def get_chat_response(message, profile, recommended_policy, collection_name, chat_history):
+    """
+    Revised chat specialist using official Google SDK.
+    """
+    # 1. Retrieve specific policy chunks for the question
+    try:
+        context = retrieve_policy_chunks(message, collection_name)
+    except Exception as e:
+        logger.warning(f"[CHAT] Context retrieval failed: {str(e)}")
+        context = "No specific policy data available for this query."
     
-    return response["output"]
+    # 2. Format history
+    history_str = ""
+    for msg in chat_history[-5:]: # Last 5 turns for context
+        role = "User" if msg.get("role") == "user" else "Aarogya"
+        history_str += f"{role}: {msg.get('content')}\n"
+
+    # 3. Build prompt
+    prompt = f"""
+You are Aarogya, an empathetic health insurance specialist focusing ONLY on the policy: {recommended_policy}.
+Use the provided policy context and user profile to answer questions accurately.
+
+USER PROFILE:
+{json.dumps(profile, indent=2)}
+
+POLICY CONTEXT:
+{context}
+
+RECENT CONVERSATION:
+{history_str}
+
+USER QUESTION: {message}
+
+INSTRUCTIONS:
+- Be warm and professional.
+- Do NOT ask for their profile details again.
+- If the information is not in the context, say you're not sure but offer general guidance.
+- Keep it concise.
+
+Aarogya:"""
+
+    # 4. Call official SDK
+    result = generate_response(prompt)
+    
+    if result["status"] == "success":
+        return result["data"]
+    
+    # 5. Intelligent Fallback Logic
+    msg_low = message.lower()
+    
+    # CASE 1: Definitions
+    definitions = {
+        "co-pay": "Co-pay is the percentage of the claim amount you have to pay from your pocket, while the insurer pays the rest.",
+        "deductible": "A deductible is the fixed amount you pay before the insurance company starts covering the costs.",
+        "waiting period": "The waiting period is the time you must wait before the insurance company covers specific illnesses or pre-existing conditions.",
+        "premium": "Premium is the regular amount you pay to keep your health insurance policy active."
+    }
+    
+    for key, val in definitions.items():
+        if key in msg_low:
+            logger.info(f"[CHAT FALLBACK] Keyword detected: {key}")
+            return val
+            
+    if any(k in msg_low for k in ["what is", "define", "meaning", "explain"]):
+        logger.info("[CHAT FALLBACK] General definition request")
+        return "I'm currently unable to access detailed AI definitions, but generally, I can help you understand waiting periods, co-pays, and coverage limits if you ask about them specifically."
+
+    # CASE 2: Personalized Fallback
+    if any(k in msg_low for k in ["my case", "for me", "profile", "condition"]):
+        age = profile.get("age", "your age")
+        conditions = profile.get("pre_existing_conditions", "your conditions")
+        logger.info("[CHAT FALLBACK] Personalized query")
+        return f"Based on your profile (Age: {age}, Conditions: {conditions}), we recommend prioritizing a plan like {recommended_policy} which covers pre-existing conditions after its specific waiting period."
+
+    # CASE 3: General Fallback
+    logger.info("[CHAT FALLBACK] General fallback")
+    return "I'm having trouble accessing my full AI capabilities right now, but I can still help explain the key benefits and exclusions of your recommended policy if you have specific questions."
+

@@ -8,15 +8,20 @@ from database import Base
 
 from routers import recommender, admin, chat
 
+from config import settings
+
+if not settings.GOOGLE_API_KEY:
+    raise ValueError("Missing GOOGLE_API_KEY in environment variables. Please check your .env file.")
+
 # Create DB tables on startup
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="AarogyaAid API", version="1.0.0")
 
-# CORS — allow frontend dev server
+# CORS — global allow for dev/admin ease
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

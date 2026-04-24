@@ -1,41 +1,54 @@
 import json
-from langchain.agents import AgentExecutor, create_tool_calling_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_google_genai import ChatGoogleGenerativeAI
+import logging
+from services.llmService import generate_response
 from agents.tools import retrieve_all_policies
-from config import settings
 
-llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash", 
-    temperature=0.2, 
-    google_api_key=settings.GOOGLE_API_KEY
-)
-
-system_prompt = """
-You are an empathetic Indian health insurance advisor named Aarogya.
-Before presenting any numbers or policy details, you must politely and empathetically acknowledge the user's specific health situation, showing that you understand their needs based on their profile.
-You must define every insurance term the first time it appears (e.g. "Waiting Period", "Co-pay", "Network Hospital").
-You must ALWAYS use the retrieve_all_policies tool before generating a recommendation to look up relevant policies for the user's needs.
-You must NEVER answer medical advice questions (e.g., "should I get this surgery"). Politely decline and redirect the user to a doctor.
-You must NEVER generate policy data from your training knowledge — use ONLY the data returned from the retrieved document chunks.
-
-Your output must contain exactly 3 sections:
-[PEER COMPARISON TABLE]
-[COVERAGE DETAIL]
-[WHY THIS POLICY]
-"""
-
-prompt = ChatPromptTemplate.from_messages([
-    ("system", system_prompt),
-    ("human", "User Profile:\n{profile}\n\nPlease generate a recommendation based on this profile."),
-    MessagesPlaceholder(variable_name="agent_scratchpad"),
-])
-
-tools = [retrieve_all_policies]
-agent = create_tool_calling_agent(llm, tools, prompt)
-agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+logger = logging.getLogger(__name__)
 
 def get_recommendation(profile: dict, all_collection_names: list) -> str:
+    """
+    Revised recommender using official Google SDK.
+    Manually retrieves context to ensure grounded responses.
+    """
     profile_str = json.dumps(profile, indent=2)
-    response = agent_executor.invoke({"profile": profile_str})
-    return response["output"]
+    
+    # 1. Manually retrieve policy context from vector store
+    # We query for general suitability based on profile traits
+    query = f"Health insurance for {profile.get('age')} year old with {profile.get('pre_existing_conditions')}"
+    context = retrieve_all_policies(query)
+    
+    # 2. Build the structured prompt
+    prompt = f"""
+You are an empathetic Indian health insurance advisor named Aarogya.
+Your goal is to recommend the best insurance policy for a user based on their health profile and the provided policy documents.
+
+USER PROFILE:
+{profile_str}
+
+AVAILABLE POLICY DATA:
+{context}
+
+INSTRUCTIONS:
+1. Compare the user's needs against the available policies.
+2. Provide a response in EXACTLY this format with three clearly marked sections:
+
+[PEER COMPARISON TABLE]
+(A markdown table comparing the top 2-3 matching policies. Include columns: Policy Name, Insurer, Premium (approx), Cover Amount, Waiting Period, Key Benefit, Suitability Score)
+
+[COVERAGE DETAIL]
+(Detail the specific inclusions and exclusions of the RECOMMENDED policy. Use '+' for inclusions and '-' for exclusions.)
+
+[WHY THIS POLICY]
+(A personalized 2-3 paragraph explanation of why this specific policy is the best match for the user's conditions, income, and lifestyle.)
+
+Begin your response:
+"""
+
+    # 3. Call the official SDK service
+    result = generate_response(prompt)
+    
+    if result["status"] == "success":
+        return result["data"]
+    
+    # Return the entire dict so the router can check 'status'
+    return result

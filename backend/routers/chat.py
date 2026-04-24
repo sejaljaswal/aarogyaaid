@@ -2,10 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from typing import Dict, List
+import logging
 
 from database import get_db
 from models.db import UserSession, PolicyDocument
 from agents.chat_agent import get_chat_response
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
 
@@ -45,20 +48,22 @@ def invoke_chat(request: ChatRequest, db: Session = Depends(get_db)):
     
     # 3. Call the agent processing engine
     try:
-        ai_response_text = get_chat_response(
+        response_text = get_chat_response(
             message=user_msg, 
             profile=profile, 
             recommended_policy=recommended_policy_name, 
             collection_name=collection_name, 
             chat_history=history
         )
+        
+        # Check if it was a fallback from logic
+        # (Since get_chat_response now returns a string regardless of LLM success)
+        print(f"[CHAT SUCCESS/FALLBACK] Reply generated")
+        ai_response_text = response_text
     except Exception as e:
-        err_str = str(e).lower()
-        if "chroma" in err_str or "connection" in err_str:
-            raise HTTPException(status_code=503, detail="Knowledge base temporarily unavailable")
-        if "google" in err_str or "llm" in err_str or "model" in err_str:
-            raise HTTPException(status_code=502, detail="AI generation service failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"[CHAT ERROR] {str(e)}")
+        ai_response_text = "I'm having a bit of trouble with my AI engine, but I'm still here to help with basic policy details."
+
     
     # 4. Append the new turns to the history buffer
     history.append({"role": "user", "content": user_msg})

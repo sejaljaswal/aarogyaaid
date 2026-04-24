@@ -2,16 +2,14 @@ import os
 import json
 import uuid
 import fitz  # PyMuPDF
+import google.generativeai as genai
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from vectorstore.chroma_client import get_or_create_collection
 from config import settings
 
-# Initialize Embeddings
-embeddings = GoogleGenerativeAIEmbeddings(
-    model="models/embedding-001", 
-    google_api_key=settings.GOOGLE_API_KEY
-)
+# Configure official client for embeddings
+genai.configure(api_key=settings.GOOGLE_API_KEY)
+EMBEDDING_MODEL = "models/gemini-embedding-001"
 
 def _chunk_and_store(text_data: list[tuple[str, dict]], policy_name: str, insurer: str, file_path: str, collection_name: str):
     """
@@ -41,19 +39,30 @@ def _chunk_and_store(text_data: list[tuple[str, dict]], policy_name: str, insure
             
     if docs:
         col = get_or_create_collection(collection_name)
-        # We manually embed the documents to ensure we are using the requested model
-        emb_vectors = embeddings.embed_documents(docs)
         
-        col.add(
-            ids=ids,
-            embeddings=emb_vectors,
-            metadatas=metadatas,
-            documents=docs
-        )
-        print(f"Stored {len(docs)} chunks in collection {collection_name}")
+        # Generate embeddings using the official SDK
+        try:
+            print(f"Generating embeddings for {len(docs)} chunks using {EMBEDDING_MODEL}")
+            result = genai.embed_content(
+                model=EMBEDDING_MODEL,
+                content=docs,
+                task_type="retrieval_document",
+                title=policy_name
+            )
+            emb_vectors = result['embedding']
+            
+            col.add(
+                ids=ids,
+                embeddings=emb_vectors,
+                metadatas=metadatas,
+                documents=docs
+            )
+            print(f"Successfully stored {len(docs)} chunks in ChromaDB")
+        except Exception as e:
+            print(f"[EMBEDDING ERROR] Failed to generate/store embeddings: {str(e)}")
+            raise e
 
 def ingest_pdf(file_path: str, policy_name: str, insurer: str, collection_name: str):
-    print(f"Ingesting PDF: {file_path}")
     doc = fitz.open(file_path)
     text_data = []
     for i in range(len(doc)):
@@ -64,21 +73,27 @@ def ingest_pdf(file_path: str, policy_name: str, insurer: str, collection_name: 
     _chunk_and_store(text_data, policy_name, insurer, file_path, collection_name)
 
 def ingest_json(file_path: str, policy_name: str, insurer: str, collection_name: str):
-    print(f"Ingesting JSON: {file_path}")
     with open(file_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
     content = json.dumps(data, indent=2)
     _chunk_and_store([(content, {})], policy_name, insurer, file_path, collection_name)
 
 def ingest_txt(file_path: str, policy_name: str, insurer: str, collection_name: str):
-    print(f"Ingesting TXT: {file_path}")
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
     _chunk_and_store([(content, {})], policy_name, insurer, file_path, collection_name)
 
 def retrieve_chunks(query: str, collection_name: str, n_results=5) -> list[dict]:
+    """Retrieves chunks by generating a query embedding using the official SDK."""
     col = get_or_create_collection(collection_name)
-    query_emb = embeddings.embed_query(query)
+    
+    # Generate query embedding
+    result = genai.embed_content(
+        model=EMBEDDING_MODEL,
+        content=query,
+        task_type="retrieval_query"
+    )
+    query_emb = result['embedding']
     
     results = col.query(
         query_embeddings=[query_emb],
