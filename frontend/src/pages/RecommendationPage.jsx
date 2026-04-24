@@ -10,6 +10,7 @@ import {
   RotateCcw,
   Star
 } from 'lucide-react';
+import ChatInterface from '../components/ChatInterface';
 
 export default function RecommendationPage() {
   const location = useLocation();
@@ -304,26 +305,9 @@ export default function RecommendationPage() {
         </div>
       </section>
 
-      {/* Chat Interface Panel Placeholder */}
+      {/* Chat Interface Panel */}
       <section className="pt-8">
-        <div className="bg-gray-900 rounded-[2rem] p-8 text-center space-y-6 border border-gray-800 shadow-2xl">
-          <div className="inline-flex items-center justify-center p-4 bg-gray-800 rounded-2xl mb-2">
-            <MessageSquare size={32} className="text-teal-400" />
-          </div>
-          <h2 className="text-3xl font-black text-white px-2">Still have questions?</h2>
-          <p className="text-gray-400 font-medium max-w-lg mx-auto">
-            Our AI health assistant has analyzed thousands of policy documents. Ask specifically about coverage for your condition or claim process.
-          </p>
-          <div className="max-w-xl mx-auto flex gap-3">
-             <div className="flex-grow bg-gray-800 border border-gray-700 rounded-xl px-6 py-4 text-gray-500 text-left font-medium">
-               Ask me anything about this policy...
-             </div>
-             <button className="bg-teal-600 p-4 rounded-xl text-white opacity-50 cursor-not-allowed">
-               <ArrowLeft className="rotate-180" size={24} />
-             </button>
-          </div>
-          <div className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Chat feature coming in Phase 7</div>
-        </div>
+        <ChatInterface session_id={session_id} profile={profile} />
       </section>
 
       {/* Action footer */}

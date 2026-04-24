@@ -7,7 +7,7 @@ from agents.tools import retrieve_policy_chunks
 from config import settings
 
 llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-pro", 
+    model="gemini-1.5-flash", 
     temperature=0.3, 
     google_api_key=settings.GOOGLE_API_KEY
 )
