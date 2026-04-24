@@ -1,0 +1,48 @@
+{
+  "policy_metadata": {
+    "policy_name": "Care Freedom",
+    "insurer": "Care Health Insurance",
+    "plan_type": "Personal Health Insurance",
+    "version": "2024.1"
+  },
+  "financial_details": {
+    "annual_premium": 8000,
+    "base_sum_insured": 300000,
+    "currency": "INR"
+  },
+  "waiting_periods": {
+    "initial_period_days": 30,
+    "diabetes_waiting_period_years": 4,
+    "hypertension_waiting_period_years": 4,
+    "other_ped_years": 4
+  },
+  "benefits_and_coverage": {
+    "inclusions": [
+      "In-patient hospitalization",
+      "Day care treatments",
+      "Organ donor cover",
+      "Alternative treatments (AYUSH)",
+      "Ambulance cover"
+    ],
+    "opd_cover": false,
+    "maternity_benefit": "Not included",
+    "domiciliary_hospitalization": "Covered up to 10% of SI"
+  },
+  "limitations": {
+    "co_pay_percentage": 20,
+    "room_rent_limit": "Single Private Room up to 1% of Sum Insured",
+    "icu_limit": "Actuals up to 2% of Sum Insured"
+  },
+  "exclusions": [
+    "Alcohol or drug abuse related injuries",
+    "Cosmetic surgery for aesthetic reasons",
+    "Dental treatment unless resulting from accident",
+    "Congenital external diseases"
+  ],
+  "claims_process": {
+    "network_hospitals_count": 9400,
+    "cashless_facility": true,
+    "settlement_ratio": "95.2%"
+  },
+  "additional_notes": "Care Freedom is designed specifically for individuals with pre-existing conditions who are looking for basic coverage with a higher co-pay to keep premiums accessible."
+}

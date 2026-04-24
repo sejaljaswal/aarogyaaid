@@ -35,6 +35,11 @@ def get_policy_recommendation(request: RecommendationRequest, db: Session = Depe
     try:
         recommendation_text = get_recommendation(profile_dict, all_collection_names)
     except Exception as e:
+        err_str = str(e).lower()
+        if "chroma" in err_str or "connection" in err_str:
+            raise HTTPException(status_code=503, detail="Knowledge base temporarily unavailable")
+        if "google" in err_str or "llm" in err_str or "model" in err_str:
+            raise HTTPException(status_code=502, detail="AI generation service failed")
         raise HTTPException(status_code=500, detail=str(e))
     
     # Attempt to extract recommended policy name by checking DB

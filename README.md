@@ -55,9 +55,25 @@ The core value of AarogyaAid lies in its intelligent matching engine. When a use
 ## Chunking Strategy
 To ensure the LLM receives precise and relevant context during the RAG process, our document ingestion pipeline employs a meticulous chunking strategy. The raw insurance PDFs are initially parsed using PyMuPDF and pdfplumber to extract clean structural text. This text is then passed through LangChain's `RecursiveCharacterTextSplitter`. We configure the splitter to break the documents into **500-token chunks** with a **50-token overlap**. This specific size ensures that chunks are large enough to retain complete clauses or conditions, but small enough to maintain high semantic density during vector search. The overlap prevents critical sentences from being severed mid-thought. Finally, these chunks are embedded and stored in ChromaDB, heavily coupled with precise metadata (such as `policy_name`, `insurer`, and `file_type`), allowing our router to strictly filter context to the required policies during retrieval.
 
+## Testing the Platform with Sample Policies
+
+To see AarogyaAid's full potential, we've provided 3 realistic sample policy documents in the `/sample_policies` directory. You can use these to test the end-to-end flow from indexing to recommendation:
+
+1.  **Star Health Comprehensive (`.txt`)**: A balanced, mid-range plan with a 2-year waiting period.
+2.  **Care Freedom (`.json`)**: A budget-focused plan with longer waiting periods and higher co-pays (useful for testing "cautionary" AI advice).
+3.  **Niva Bupa ReAssure 2.0 (`.txt`)**: A premium high-coverage plan with a short 1-year waiting period and no co-pays in metros.
+
+### To load these policies:
+1.  Navigate to http://localhost:5173/admin and log in with your credentials.
+2.  In the **Upload Policy** section, select one of the sample files.
+3.  Fill in the **Policy Name** and **Insurer** fields exactly as they appear in the filename.
+4.  Click **Start Upload**. The AI will begin indexing the document into the vector store.
+5.  Once indexed, go back to the home page (`/`) and submit a profile to see these policies being recommended and compared in real-time.
+
 ## Running Tests
 To ensure the integrity of the recommendation engine and API endpoints, execute the following command from the `backend/` directory (with your virtual environment activated):
 
 ```bash
-pytest
+# Ensure PYTHONPATH is set so tests can find the internal modules
+PYTHONPATH=. pytest
 ```

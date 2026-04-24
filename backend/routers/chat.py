@@ -53,6 +53,11 @@ def invoke_chat(request: ChatRequest, db: Session = Depends(get_db)):
             chat_history=history
         )
     except Exception as e:
+        err_str = str(e).lower()
+        if "chroma" in err_str or "connection" in err_str:
+            raise HTTPException(status_code=503, detail="Knowledge base temporarily unavailable")
+        if "google" in err_str or "llm" in err_str or "model" in err_str:
+            raise HTTPException(status_code=502, detail="AI generation service failed")
         raise HTTPException(status_code=500, detail=str(e))
     
     # 4. Append the new turns to the history buffer

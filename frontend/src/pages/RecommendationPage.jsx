@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -6,23 +6,66 @@ import {
   CheckCircle, 
   Info, 
   XCircle, 
-  MessageSquare, 
   RotateCcw,
   Star
 } from 'lucide-react';
+import axios from 'axios';
 import ChatInterface from '../components/ChatInterface';
+import RecommendationSkeleton from '../components/Skeletons';
+import ErrorBoundary from '../components/ErrorBoundary';
 
-export default function RecommendationPage() {
+function RecommendationContent() {
   const location = useLocation();
   const navigate = useNavigate();
   
-  const { session_id, recommendation_text, recommended_policy_name, profile } = location.state || {};
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [data, setData] = useState({
+    session_id: location.state?.session_id || null,
+    recommendation_text: location.state?.recommendation_text || null,
+    recommended_policy_name: location.state?.recommended_policy_name || null,
+    profile: location.state?.profile || null
+  });
+
+  useEffect(() => {
+    // If we have a profile but no recommendation text, fetch it
+    if (data.profile && !data.recommendation_text && !loading) {
+      fetchRecommendation();
+    }
+  }, [data.profile, data.recommendation_text]);
+
+  const fetchRecommendation = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const payload = {
+        name: data.profile.fullName,
+        age: parseInt(data.profile.age),
+        lifestyle: data.profile.lifestyle,
+        pre_existing_conditions: data.profile.conditions.join(', '),
+        income_band: data.profile.incomeBand,
+        city_tier: data.profile.cityTier
+      };
+
+      const response = await axios.post('/api/recommend', payload);
+      setData(prev => ({
+        ...prev,
+        session_id: response.data.session_id,
+        recommendation_text: response.data.recommendation_text,
+        recommended_policy_name: response.data.recommended_policy_name
+      }));
+    } catch (err) {
+      setError("We couldn't generate a recommendation right now. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Utility to parse sections
   const sections = useMemo(() => {
-    if (!recommendation_text) return {};
+    if (!data.recommendation_text) return {};
     
-    const parts = recommendation_text.split(/\[(PEER COMPARISON TABLE|COVERAGE DETAIL|WHY THIS POLICY)\]/);
+    const parts = data.recommendation_text.split(/\[(PEER COMPARISON TABLE|COVERAGE DETAIL|WHY THIS POLICY)\]/);
     const result = {};
     
     for (let i = 1; i < parts.length; i += 2) {
@@ -30,9 +73,11 @@ export default function RecommendationPage() {
     }
     
     return result;
-  }, [recommendation_text]);
+  }, [data.recommendation_text]);
 
-  if (!recommendation_text || !profile) {
+  if (loading) return <RecommendationSkeleton />;
+
+  if (!data.profile || (!data.recommendation_text && !loading)) {
     return (
       <div className="flex flex-col items-center justify-center py-20 px-6 text-center space-y-6">
         <div className="p-4 bg-teal-50 rounded-full">
@@ -50,95 +95,71 @@ export default function RecommendationPage() {
     );
   }
 
+  if (error) {
+    return (
+        <div className="flex flex-col items-center justify-center py-20 px-6 text-center space-y-6">
+          <h2 className="text-2xl font-bold text-red-600">{error}</h2>
+          <button onClick={fetchRecommendation} className="px-6 py-3 bg-teal-600 text-white rounded-xl">Retry</button>
+        </div>
+    );
+  }
+
   // Parse Table Data
-  const tableData = useMemo(() => {
-    const raw = sections['PEER COMPARISON TABLE'] || '';
-    const lines = raw.split('\n').filter(line => line.trim() && !line.includes('---'));
-    
-    // Simple parser for | Policy Name | ... format
-    return lines.map(line => {
-      return line.split('|').map(cell => cell.trim()).filter(Boolean);
+  const tableData = [];
+  if (sections['PEER COMPARISON TABLE']) {
+    const lines = sections['PEER COMPARISON TABLE'].split('\n').filter(line => line.trim() && !line.includes('---'));
+    lines.forEach(line => {
+        tableData.push(line.split('|').map(cell => cell.trim()).filter(Boolean));
     });
-  }, [sections]);
+  }
 
   // Parse Coverage Detail
-  const coverageData = useMemo(() => {
-    const raw = sections['COVERAGE DETAIL'] || '';
-    const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
-    
-    const inclusions = [];
-    const exclusions = [];
-    let subLimits = "";
-    let claimType = "";
-    let coPay = "";
-
+  const coverageData = { inclusions: [], exclusions: [], subLimits: "", claimType: "", coPay: "" };
+  if (sections['COVERAGE DETAIL']) {
+    const lines = sections['COVERAGE DETAIL'].split('\n').map(l => l.trim()).filter(Boolean);
     lines.forEach(line => {
       if (line.toLowerCase().includes('inclusion:') || line.startsWith('+')) {
-        inclusions.push(line.replace(/inclusion:|[-+]/gi, '').trim());
+        coverageData.inclusions.push(line.replace(/inclusion:|[-+]/gi, '').trim());
       } else if (line.toLowerCase().includes('exclusion:') || line.startsWith('-')) {
-        exclusions.push(line.replace(/exclusion:|[-+]/gi, '').trim());
+        coverageData.exclusions.push(line.replace(/exclusion:|[-+]/gi, '').trim());
       } else if (line.toLowerCase().includes('sub-limit')) {
-        subLimits = line.split(':')[1]?.trim() || line;
+        coverageData.subLimits = line.split(':')[1]?.trim() || line;
       } else if (line.toLowerCase().includes('claim type')) {
-        claimType = line.split(':')[1]?.trim() || line;
+        coverageData.claimType = line.split(':')[1]?.trim() || line;
       } else if (line.toLowerCase().includes('co-pay')) {
-        coPay = line.split(':')[1]?.trim() || line;
+        coverageData.coPay = line.split(':')[1]?.trim() || line;
       }
     });
+  }
 
-    return { inclusions, exclusions, subLimits, claimType, coPay };
-  }, [sections]);
+  const itemsToBold = [
+    data.profile.fullName,
+    data.profile.age,
+    data.profile.lifestyle,
+    data.profile.incomeBand,
+    data.profile.cityTier,
+    ...(data.profile.conditions || [])
+  ].filter(item => item && String(item).length > 0)
+   .map(item => String(item).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 
-  // Handle bold profiles in "Why This Policy"
-  const renderWhyText = (text) => {
+   const renderWhyText = (text) => {
     if (!text) return null;
-    
-    // Filter and escape profile attributes for regex
-    const itemsToBold = [
-      profile.fullName,
-      profile.age,
-      profile.lifestyle,
-      profile.incomeBand,
-      profile.cityTier,
-      ...(profile.conditions || [])
-    ].filter(item => item && String(item).length > 0)
-     .map(item => String(item).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-
     if (itemsToBold.length === 0) return <p className="text-gray-700 leading-relaxed text-lg">{text}</p>;
-
-    // Create a single regex for all keywords
     const regex = new RegExp(`(${itemsToBold.join('|')})`, 'gi');
     const parts = text.split(regex);
-
     return (
       <p className="text-gray-700 leading-relaxed text-lg">
         {parts.map((part, i) => {
-          // Check if this part matches any of our keywords
-          const isMatch = itemsToBold.some(item => 
-            new RegExp(`^${item}$`, 'i').test(part)
-          );
+          const isMatch = itemsToBold.some(item => new RegExp(`^${item}$`, 'i').test(part));
           return isMatch ? <strong key={i} className="text-teal-700 font-bold">{part}</strong> : part;
         })}
       </p>
     );
   };
 
-  const getGreetingEmoji = () => {
-    if (profile.conditions?.includes('Cardiac') || profile.conditions?.includes('Diabetes')) return '🧡';
-    return '👋';
-  };
-
-  const getEmpatheticSubtitle = () => {
-    if (profile.conditions?.length > 0 && !profile.conditions.includes('None')) {
-      return `We've specially curated this policy to ensure your health conditions are covered with minimal waiting periods.`;
-    }
-    return `We've matched your profile with the most reliable policies in the market today.`;
-  };
-
   return (
     <div className="w-full max-w-6xl mx-auto px-4 pb-20 space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-1000">
       
-      {/* Header section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 border-b border-gray-100 pb-8">
         <div className="space-y-2">
           <button 
@@ -149,20 +170,21 @@ export default function RecommendationPage() {
             Start Over
           </button>
           <h1 className="text-4xl md:text-5xl font-black text-gray-900 tracking-tight">
-            Hi {profile.fullName.split(' ')[0]} {getGreetingEmoji()}, <br/>
+            Hi {data.profile.fullName.split(' ')[0]}, <br/>
             <span className="text-teal-600">here's what we found for you</span>
           </h1>
           <p className="text-xl text-gray-500 font-medium max-w-2xl leading-relaxed">
-            {getEmpatheticSubtitle()}
+            {data.profile.conditions?.length > 0 && !data.profile.conditions.includes('None') 
+              ? `We've specially curated this policy to ensure your health conditions are covered with minimal waiting periods.`
+              : `We've matched your profile with the most reliable policies in the market today.`}
           </p>
         </div>
         <div className="bg-teal-50 px-6 py-4 rounded-2xl border border-teal-100 hidden lg:block">
           <div className="text-xs font-black text-teal-600 uppercase tracking-widest mb-1">Session ID</div>
-          <div className="text-sm font-mono font-bold text-teal-800">{session_id || 'LOCAL_MATCH'}</div>
+          <div className="text-sm font-mono font-bold text-teal-800">{data.session_id || 'LOCAL_MATCH'}</div>
         </div>
       </div>
 
-      {/* SECTION 1 — Peer Comparison Table */}
       <section className="space-y-6">
         <div className="flex items-center space-x-3">
           <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
@@ -175,47 +197,33 @@ export default function RecommendationPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50/80 border-b border-gray-100">
-                {tableData[0]?.map((header, i) => (
+                {['Policy Name', 'Insurer', 'Premium (₹/yr)', 'Cover Amount', 'Waiting Period', 'Key Benefit', 'Suitability Score'].map((h, i) => (
                   <th key={i} className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-wider">
                     <div className="flex items-center">
-                      {header}
-                      {header.includes('Waiting Period') && (
-                        <div className="group relative ml-2">
-                          <Info size={14} className="text-gray-300 cursor-help" />
-                          <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 p-3 bg-gray-900 text-white text-[10px] font-medium rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity shadow-xl z-50 leading-relaxed">
-                            The time you must wait before the insurance company covers specific pre-existing illnesses.
-                          </div>
-                        </div>
-                      )}
+                        {h}
+                        {h === 'Waiting Period' && (
+                            <div className="group relative ml-2">
+                            <Info size={14} className="text-gray-300 cursor-help" />
+                            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-48 p-3 bg-gray-900 text-white text-[10px] font-medium rounded-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity shadow-xl z-50 leading-relaxed">
+                                The time you must wait before the insurance company covers specific pre-existing illnesses.
+                            </div>
+                            </div>
+                        )}
                     </div>
                   </th>
-                )) || (
-                  ['Policy Name', 'Insurer', 'Premium (₹/yr)', 'Cover Amount', 'Waiting Period', 'Key Benefit', 'Suitability Score'].map((h, i) => (
-                    <th key={i} className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-wider">{h}</th>
-                  ))
-                )}
+                ))}
               </tr>
             </thead>
             <tbody>
               {tableData.slice(1).map((row, idx) => {
-                const isRecommended = row[0]?.toLowerCase().includes(recommended_policy_name?.toLowerCase());
+                const isRecommended = row[0]?.toLowerCase().includes(data.recommended_policy_name?.toLowerCase());
                 return (
-                  <tr 
-                    key={idx} 
-                    className={`border-b border-gray-50 transition-colors ${isRecommended ? 'bg-teal-50/50' : 'hover:bg-gray-50/50'}`}
-                  >
+                  <tr key={idx} className={`border-b border-gray-50 transition-colors ${isRecommended ? 'bg-teal-50/50' : 'hover:bg-gray-50/50'}`}>
                     {row.map((cell, i) => (
                       <td key={i} className="px-6 py-5">
-                        {i === 0 && isRecommended ? (
-                          <div className="flex flex-col">
-                            <span className="font-bold text-gray-900">{cell}</span>
-                            <span className="text-[10px] font-black text-teal-600 uppercase tracking-widest mt-1 bg-teal-100 px-2 py-0.5 rounded-full w-fit">Our Pick</span>
-                          </div>
-                        ) : (
-                          <span className={`text-sm ${i === 2 || i === 3 ? 'font-black text-gray-900' : 'font-medium text-gray-600'}`}>
+                        <span className={`text-sm ${i === 2 || i === 3 ? 'font-black text-gray-900' : 'font-medium text-gray-600'} ${isRecommended && i === 0 ? 'font-bold text-teal-700' : ''}`}>
                             {cell}
-                          </span>
-                        )}
+                        </span>
                       </td>
                     ))}
                   </tr>
@@ -226,7 +234,6 @@ export default function RecommendationPage() {
         </div>
       </section>
 
-      {/* SECTION 2 — Coverage Detail */}
       <section className="space-y-6">
         <div className="flex items-center space-x-3">
           <div className="p-2 bg-teal-50 text-teal-600 rounded-lg">
@@ -234,9 +241,7 @@ export default function RecommendationPage() {
           </div>
           <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tight">Coverage Detail</h2>
         </div>
-
         <div className="grid md:grid-cols-2 gap-8">
-          {/* Left Card: Inclusions */}
           <div className="bg-white p-8 rounded-[2rem] shadow-xl border border-gray-50 space-y-6">
             <h3 className="text-xl font-black text-gray-900 flex items-center">
               <span className="w-2 h-8 bg-green-500 rounded-full mr-4"></span>
@@ -250,19 +255,7 @@ export default function RecommendationPage() {
                 </li>
               ))}
             </ul>
-            <div className="pt-6 border-t border-gray-50 grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Sub-limits</div>
-                <div className="text-sm font-bold text-gray-900">{coverageData.subLimits || 'No limits'}</div>
-              </div>
-              <div>
-                <div className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Claim Type</div>
-                <div className="text-sm font-bold text-gray-900">{coverageData.claimType || 'Cashless'}</div>
-              </div>
-            </div>
           </div>
-
-          {/* Right Card: Exclusions */}
           <div className="bg-white p-8 rounded-[2rem] shadow-xl border border-gray-50 space-y-6">
             <h3 className="text-xl font-black text-gray-900 flex items-center">
               <span className="w-2 h-8 bg-red-500 rounded-full mr-4"></span>
@@ -276,18 +269,10 @@ export default function RecommendationPage() {
                 </li>
               ))}
             </ul>
-            <div className="pt-6 border-t border-gray-50">
-              <div className="text-xs font-black text-gray-400 uppercase tracking-widest mb-1">Co-pay %</div>
-              <div className="text-sm font-bold text-gray-900">
-                {coverageData.coPay || '0% (We recommend no co-pay policies)'}
-                <p className="text-[10px] text-gray-400 font-medium mt-1">Co-pay is the % of the claim amount you have to pay yourself.</p>
-              </div>
-            </div>
           </div>
         </div>
       </section>
 
-      {/* SECTION 3 — Why This Policy */}
       <section className="space-y-6">
         <div className="flex items-center space-x-3">
           <div className="p-2 bg-amber-50 text-amber-600 rounded-lg">
@@ -296,21 +281,18 @@ export default function RecommendationPage() {
           <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tight">Why we chose this for you</h2>
         </div>
         <div className="bg-teal-50/50 p-8 md:p-10 rounded-[2.5rem] border border-teal-100 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-8 opacity-5">
-            <ShieldCheck size={120} className="text-teal-600" />
-          </div>
           <div className="relative z-10 max-w-4xl">
             {renderWhyText(sections['WHY THIS POLICY'])}
           </div>
         </div>
       </section>
 
-      {/* Chat Interface Panel */}
       <section className="pt-8">
-        <ChatInterface session_id={session_id} profile={profile} />
+        <ErrorBoundary>
+            <ChatInterface session_id={data.session_id} profile={data.profile} />
+        </ErrorBoundary>
       </section>
 
-      {/* Action footer */}
       <div className="flex justify-center pt-8">
         <button 
           onClick={() => navigate('/')}
@@ -320,7 +302,14 @@ export default function RecommendationPage() {
           <span>Not what you wanted? Start Over</span>
         </button>
       </div>
-
     </div>
+  );
+}
+
+export default function RecommendationPage() {
+  return (
+    <ErrorBoundary>
+      <RecommendationContent />
+    </ErrorBoundary>
   );
 }

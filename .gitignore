@@ -1,1 +1,24 @@
-.env.example
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.db
+aarogya.db
+
+# Vector Store
+chroma_db/
+uploads/
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# OS
+.DS_Store
+Thumbs.db
